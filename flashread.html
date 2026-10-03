@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FlashRead</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f5f1;--fg:#1c1c1a;--ac:#d6372b;--card:#fff;--mut:#777;--bd:#ddd}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141414;--fg:#eee;--card:#222;--mut:#999;--bd:#383838}}
+:root[data-theme="dark"]{--bg:#141414;--fg:#eee;--card:#222;--mut:#999;--bd:#383838}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,sans-serif;min-height:100%}
+.wrap{max-width:760px;margin:0 auto;padding:14px}
+h1{font-size:20px;margin:4px 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.drop{border:2px dashed var(--bd);border-radius:12px;padding:18px;text-align:center;cursor:pointer;color:var(--mut)}
+.drop.on{border-color:var(--ac)}
+textarea{width:100%;min-height:90px;margin-top:10px;background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:10px;padding:8px;font:inherit}
+button,select,input[type=text],input[type=number]{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px 12px}
+button{cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+#stage{position:relative;height:230px;display:flex;align-items:center;justify-content:center;background:var(--card);border:1px solid var(--bd);border-radius:14px;margin-bottom:10px;user-select:none;-webkit-user-select:none;touch-action:manipulation;overflow:hidden}
+#stage.full{position:fixed;inset:0;height:100%;z-index:9;border-radius:0}
+#word{display:grid;grid-template-columns:1fr auto 1fr;width:100%;padding:0 4px;font-size:var(--fs,56px);font-family:var(--ff,Georgia,serif);white-space:nowrap}
+#word .l{text-align:right}#word .r{text-align:left}#word .c{color:var(--ac)}
+#word.plain{display:block;text-align:center}
+.guide{position:absolute;left:50%;width:2px;height:18px;background:var(--ac);opacity:.5}
+.g1{top:30px}.g2{bottom:30px}
+#hint{position:absolute;bottom:8px;width:100%;text-align:center;font-size:12px;color:var(--mut)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.row label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px;flex:1;min-width:130px}
+.row label.ck{flex-direction:row;align-items:center;gap:6px;color:var(--fg);font-size:14px}
+input[type=range]{width:100%;accent-color:var(--ac)}
+#st{font-size:13px;color:var(--mut);margin-top:6px}
+details summary{cursor:pointer;font-weight:600}
+.ctl{display:flex;gap:8px;justify-content:center}
+.ctl button{flex:1;font-size:18px}
+.chip{display:inline-flex;border:1px solid var(--bd);border-radius:20px;margin:3px;overflow:hidden}.chip button{border:0;border-radius:0;padding:5px 10px}
+.hrow{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--bd)}.hrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hrow small{color:var(--mut)}
+.mut{color:var(--mut);font-size:13px;margin-top:8px}
+</style></head><body>
+<div class="wrap">
+<h1>⚡ FlashRead</h1>
+
+<div class="card">
+ <div class="drop" id="drop">Tap or drop a file here<br><small>PDF · Word (.docx) · Image · TXT/MD/CSV</small></div>
+ <input type="file" id="file" hidden accept=".pdf,.docx,.txt,.md,.csv,.html,image/*">
+ <textarea id="txt" placeholder="…or paste / edit text here, then press Load text"></textarea>
+ <div class="row"><button class="p" id="load">Load text</button>
+ <label style="min-width:100px">OCR language<input type="text" id="lang" value="eng"></label></div>
+ <div id="st">Ready.</div>
+</div>
+
+<div id="stage"><div class="guide g1"></div><div class="guide g2"></div><div id="word">Load a file to begin</div><div id="hint">Tap right = next · left = back · centre-hold = pause</div></div>
+<input type="range" id="seek" min="0" max="0" value="0">
+<div class="row" style="justify-content:space-between"><span id="pos">0 / 0</span><span id="eta"></span></div>
+<div class="ctl"><button id="back">⏮</button><button id="play" class="p">▶ Play</button><button id="fwd">⏭</button><button id="star" title="Save word (S)">★</button><button id="fs">⛶</button></div>
+
+<div class="card" style="margin-top:12px"><details open><summary>Settings (no coding needed)</summary>
+ <div class="row">
+  <label>Mode<select id="mode"><option value="auto">Auto – flashes by itself</option><option value="manual">Manual – tap to advance</option></select></label>
+  <label>Timing<select id="tmode"><option value="wpm">Words per minute</option><option value="ms">Fixed ms per word</option></select></label>
+ </div>
+ <div class="row">
+  <label><span id="spl">Speed: 300 wpm</span><input type="range" id="speed" min="60" max="1200" step="10" value="300"></label>
+  <label>Words per flash<select id="chunk"><option>1</option><option>2</option><option>3</option></select></label>
+ </div>
+ <div class="row">
+  <label class="ck"><input type="checkbox" id="punct" checked>Pause longer at punctuation</label>
+  <label class="ck"><input type="checkbox" id="long" checked>Longer words stay longer</label>
+  <label class="ck"><input type="checkbox" id="orp" checked>Highlight focus letter</label>
+  <label class="ck"><input type="checkbox" id="guides" checked>Show guide marks</label>
+ </div>
+ <div class="row">
+  <label><span id="fsl">Font size: 56</span><input type="range" id="size" min="20" max="140" value="56"></label>
+  <label>Font<select id="font"><option value="Georgia,serif">Serif</option><option value="system-ui,sans-serif">Sans</option><option value="ui-monospace,monospace">Mono</option><option value="'Comic Sans MS',cursive">Casual</option></select></label>
+ </div>
+ <div class="row">
+  <label>Background<input type="color" id="cbg" value="#ffffff"></label>
+  <label>Text<input type="color" id="cfg" value="#1c1c1a"></label>
+  <label>Accent<input type="color" id="cac" value="#d6372b"></label>
+  <label>Theme<select id="theme"><option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+ </div>
+ <div class="row">
+  <label>Skip these words (comma separated)<input type="text" id="skip" placeholder="the, a, of"></label>
+  <label>Replace (word=new, …)<input type="text" id="rep" placeholder="u=you, btw=by the way"></label>
+ </div>
+ <div class="row"><label class="ck"><input type="checkbox" id="tts">🔊 Speak each word aloud</label><label class="ck"><input type="checkbox" id="sync">Wait for voice to finish</label></div>
+ <div class="row"><label>Voice<select id="voice"></select></label><label>Voice speed<input type="range" id="vrate" min="0.5" max="2" step="0.1" value="1"></label></div>
+ <div class="row"><label class="ck"><input type="checkbox" id="rewind" checked>Auto-rewind 3 words when resuming</label>
+ <button id="reset">Reset all settings</button></div>
+</details></div>
+<div class="card"><details open><summary>★ Saved words (<span id="wc">0</span>)</summary>
+ <div class="row"><button id="wflash">Flash them</button><button id="wcopy">Copy all</button><button id="wclear">Clear</button></div><div id="wl"></div></details></div>
+<div class="card"><details open><summary>🕘 Reading history</summary><div id="hl"></div></details></div>
+<p style="font-size:12px;color:var(--mut)">Shortcuts: S saves current word · Space play/pause · ← → step · ↑ ↓ speed. Swipe left/right on the word to step. Settings are remembered on this device.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.0/tesseract.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const DEF={mode:'auto',tmode:'wpm',speed:300,chunk:'1',punct:1,long:1,orp:1,guides:1,size:56,font:'Georgia,serif',cbg:'#ffffff',cfg:'#1c1c1a',cac:'#d6372b',theme:'auto',skip:'',rep:'',rewind:1,tts:0,sync:1,vrate:1,voice:''};
+const KEYS=Object.keys(DEF);let S={...DEF};
+try{Object.assign(S,JSON.parse(localStorage.getItem('fr_s')||'{}'))}catch(e){}
+let words=[],i=0,timer=null,playing=false,colored=false;
+const save=()=>{try{localStorage.setItem('fr_s',JSON.stringify(S))}catch(e){}};
+function applyUI(){
+ KEYS.forEach(k=>{const el=$(k);if(!el)return;if(el.type==='checkbox')el.checked=!!S[k];else el.value=S[k]});
+ const r=document.documentElement.style;r.setProperty('--fs',S.size+'px');r.setProperty('--ff',S.font);
+ if(colored||S.cbg!=='#ffffff'||S.cfg!=='#1c1c1a'){/* custom colours apply to stage only */}
+ const st=$('stage');st.style.background=(S.cbg!=='#ffffff')?S.cbg:'';st.style.color=(S.cfg!=='#1c1c1a')?S.cfg:'';
+ r.setProperty('--ac',S.cac);
+ document.documentElement.dataset.theme=S.theme==='auto'?'':S.theme;
+ document.querySelectorAll('.guide').forEach(g=>g.style.display=S.guides?'':'none');
+ $('spl').textContent=S.tmode==='wpm'?`Speed: ${S.speed} wpm`:`Duration: ${S.speed} ms per flash`;
+ $('fsl').textContent='Font size: '+S.size;
+ const sp=$('speed');if(S.tmode==='wpm'){sp.min=60;sp.max=1200;sp.step=10}else{sp.min=50;sp.max=3000;sp.step=10}
+ sp.value=S.speed;
+}
+KEYS.forEach(k=>{const el=$(k);if(!el)return;el.addEventListener('input',()=>{
+ S[k]=el.type==='checkbox'?(el.checked?1:0):(el.type==='range'?+el.value:el.value);
+ if(k==='tmode'){S.speed=S.tmode==='wpm'?300:600}
+ if(['skip','rep','chunk'].includes(k))rebuild();
+ save();applyUI();updInfo()})});
+$('reset').onclick=()=>{S={...DEF};save();applyUI();rebuild()};
+
+/* ---------- text pipeline ---------- */
+let raw='';
+function rebuild(){
+ const skip=new Set(S.skip.toLowerCase().split(',').map(s=>s.trim()).filter(Boolean));
+ const rep={};S.rep.split(',').forEach(p=>{const [a,b]=p.split('=');if(a&&b)rep[a.trim().toLowerCase()]=b.trim()});
+ let w=raw.replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+ w=w.map(x=>{const core=x.toLowerCase().replace(/[^\p{L}\p{N}']/gu,'');return rep[core]?x.replace(new RegExp(core,'i'),rep[core]):x})
+    .filter(x=>!skip.has(x.toLowerCase().replace(/[^\p{L}\p{N}']/gu,'')));
+ const n=+S.chunk,out=[];for(let j=0;j<w.length;j+=n)out.push(w.slice(j,j+n).join(' '));
+ const prog=words.length?i/words.length:0;words=out;i=Math.min(Math.floor(prog*out.length),Math.max(0,out.length-1));
+ $('seek').max=Math.max(0,words.length-1);show();
+}
+let curTitle='Pasted text',curId=null;
+function setText(t,msg,res){raw=t;$('txt').value=t;i=0;words=[];rebuild();
+ if(res){curId=res.id;curTitle=res.title;i=Math.min(Math.max(0,words.length-1),Math.floor(res.frac*words.length));show()}
+ else{curId=Date.now()+'';addHist()}
+ $('st').textContent=msg||`Loaded ${words.length} flashes.`}
+$('load').onclick=()=>{const t=$('txt').value;curTitle='Pasted: '+t.trim().slice(0,25);setText(t)};
+
+/* ---------- file extraction ---------- */
+const status=m=>$('st').textContent=m;
+async function ocr(src){
+ const lang=$('lang').value.trim()||'eng';
+ try{const r=await Tesseract.recognize(src,lang,{logger:m=>{if(m.status)status(`OCR: ${m.status} ${Math.round((m.progress||0)*100)}%`)}});return r.data.text}
+ catch(e){status('OCR could not start (it needs to download its engine). Paste text instead or try a text-based file.');return''}
+}
+async function handle(f){
+ if(!f)return;stop();curTitle=f.name;const n=f.name.toLowerCase();status('Reading '+f.name+'…');
+ try{
+  if(f.type.startsWith('image/'))return setText(await ocr(f));
+  if(n.endsWith('.pdf')){
+   pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+   const pdf=await pdfjsLib.getDocument({data:await f.arrayBuffer()}).promise;let t='';
+   for(let p=1;p<=pdf.numPages;p++){status(`PDF page ${p}/${pdf.numPages}`);
+    const pg=await pdf.getPage(p);let s=(await pg.getTextContent()).items.map(x=>x.str).join(' ');
+    if(s.trim().length<15){const vp=pg.getViewport({scale:2}),c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;
+     await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;s=await ocr(c)}
+    t+=s+' '}
+   return setText(t)}
+  if(n.endsWith('.docx')){const r=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});return setText(r.value)}
+  let t=await f.text();if(n.endsWith('.html'))t=new DOMParser().parseFromString(t,'text/html').body.textContent;
+  setText(t)
+ }catch(e){status('Could not read this file: '+e.message)}
+}
+const drop=$('drop');drop.onclick=()=>$('file').click();$('file').onchange=e=>handle(e.target.files[0]);
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('on')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('on')}));
+drop.addEventListener('drop',e=>handle(e.dataTransfer.files[0]));
+
+/* ---------- display ---------- */
+function show(){
+ const el=$('word'),w=words[i]||'';
+ if(!w){el.className='plain';el.textContent=raw?'Done ✓':'Load a file to begin';updInfo();return}
+ if(S.orp&&!w.includes(' ')){el.className='';const p=Math.max(0,Math.min(w.length-1,Math.ceil(w.length/4)-1));
+  el.innerHTML='';[['l',w.slice(0,p)],['c',w[p]],['r',w.slice(p+1)]].forEach(([c,t])=>{const s=document.createElement('span');s.className=c;s.textContent=t;el.appendChild(s)})}
+ else{el.className='plain';el.textContent=w}
+ $('seek').value=i;updInfo();
+}
+function updInfo(){
+ $('pos').textContent=`${Math.min(i+1,words.length)} / ${words.length}`;
+ const rest=words.slice(i).reduce((a,w)=>a+dur(w),0)/1000;
+ $('eta').textContent=words.length?`~${Math.floor(rest/60)}m ${Math.round(rest%60)}s left`:'';
+}
+function dur(w){
+ let d=S.tmode==='wpm'?60000/S.speed*(+S.chunk):+S.speed;
+ if(S.punct){if(/[.!?]["')\]]?$/.test(w))d*=2;else if(/[,;:–—]["')\]]?$/.test(w))d*=1.5}
+ if(S.long){const L=w.replace(/\s/g,'').length/(+S.chunk);if(L>8)d*=1+Math.min(.6,(L-8)*.05)}
+ return d;
+}
+function tick(){if(i>=words.length-1){stop();return}i++;show();speak(words[i]);if(i%10===0)savePos();sched()}
+function sched(){timer=setTimeout(wait,dur(words[i]))}
+function wait(){if(S.tts&&S.sync&&window.speechSynthesis&&speechSynthesis.speaking){timer=setTimeout(wait,40);return}tick()}
+function play(){if(!words.length)return;if(i>=words.length-1)i=0;if(S.rewind&&i>2)i-=3;
+ if(S.mode==='manual'){S.mode='auto';applyUI()}
+ playing=true;$('play').textContent='⏸ Pause';show();speak(words[i]);sched()}
+function stop(){playing=false;clearTimeout(timer);$('play').textContent='▶ Play';try{speechSynthesis.cancel()}catch(e){}savePos();renderH()}
+const toggle=()=>playing?stop():play();
+const step=d=>{stop();i=Math.max(0,Math.min(words.length-1,i+d));show();speak(words[i])};
+$('play').onclick=toggle;$('back').onclick=()=>step(-1);$('fwd').onclick=()=>step(1);
+$('seek').oninput=e=>{i=+e.target.value;show()};
+$('fs').onclick=()=>{$('stage').classList.toggle('full')};
+
+/* ---------- touch / keys ---------- */
+const st=$('stage');let t0=null,hold=null,held=false;
+st.addEventListener('pointerdown',e=>{t0={x:e.clientX,t:Date.now()};held=false;
+ hold=setTimeout(()=>{held=true;if(playing)stop();else play()},550)});
+st.addEventListener('pointerup',e=>{clearTimeout(hold);if(!t0||held)return;
+ const dx=e.clientX-t0.x,r=st.getBoundingClientRect(),rel=(e.clientX-r.left)/r.width;
+ if(Math.abs(dx)>40)return step(dx<0?1:-1);
+ if(S.mode==='manual'||!playing){ if(rel<.33)step(-1);else step(1)}
+ else{ if(rel<.33)step(-1);else if(rel>.66)step(1);else stop()}
+ t0=null});
+st.addEventListener('pointercancel',()=>clearTimeout(hold));
+document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+ if(e.code==='Space'){e.preventDefault();toggle()}
+ else if(e.key==='ArrowRight')step(1);else if(e.key==='ArrowLeft')step(-1);
+ else if(e.key==='ArrowUp'){S.speed=Math.min(+$('speed').max,S.speed+20);save();applyUI()}
+ else if(e.key==='ArrowDown'){S.speed=Math.max(+$('speed').min,S.speed-20);save();applyUI()}
+ else if(e.key==='Escape')st.classList.remove('full')});
+/* ---------- text-to-speech ---------- */
+let voices=[];
+function speak(t,force){if(!window.speechSynthesis||!t||(!S.tts&&!force))return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=+S.vrate;
+ const v=voices.find(x=>x.name===S.voice);if(v){u.voice=v;u.lang=v.lang}speechSynthesis.speak(u)}catch(e){}}
+function loadVoices(){if(!window.speechSynthesis)return;voices=speechSynthesis.getVoices();const sel=$('voice');sel.innerHTML='<option value="">Default</option>';
+ voices.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name+' ('+v.lang+')';sel.appendChild(o)});sel.value=S.voice}
+try{speechSynthesis.onvoiceschanged=loadVoices}catch(e){}
+$('tts').addEventListener('input',()=>{if(!S.tts)try{speechSynthesis.cancel()}catch(e){}});
+
+/* ---------- storage: saved words + history ---------- */
+const lsGet=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+const lsDel=k=>{try{localStorage.removeItem(k)}catch(e){}};
+let W=lsGet('fr_w',[]),H=lsGet('fr_h',[]);
+const clean=w=>w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,'');
+function saveWord(){const w=clean(words[i]||'');if(!w)return;
+ if(!W.some(x=>x.w.toLowerCase()===w.toLowerCase())){W.unshift({w,src:curTitle});lsSet('fr_w',W);renderW()}
+ $('st').textContent='Saved “'+w+'”'}
+function renderW(){$('wc').textContent=W.length;const box=$('wl');box.innerHTML='';box.className=W.length?'':'mut';
+ if(!W.length){box.textContent='Tap ★ (or press S) while reading to save a word. Tap a saved word to hear it.';return}
+ W.forEach((x,k)=>{const c=document.createElement('span');c.className='chip';const b=document.createElement('button');b.textContent=x.w;b.title=x.src||'';b.onclick=()=>speak(x.w,1);
+  const d=document.createElement('button');d.textContent='×';d.onclick=()=>{W.splice(k,1);lsSet('fr_w',W);renderW()};c.append(b,d);box.appendChild(c)})}
+$('star').onclick=saveWord;
+$('wclear').onclick=()=>{W=[];lsSet('fr_w',W);renderW()};
+$('wcopy').onclick=async()=>{try{await navigator.clipboard.writeText(W.map(x=>x.w).join('\n'));$('st').textContent='Copied '+W.length+' words.'}catch(e){$('wl').insertAdjacentText('beforebegin','')  ;$('st').textContent='Copy blocked – select the words manually.'}};
+$('wflash').onclick=()=>{if(!W.length)return;stop();curTitle='Saved words';setText(W.map(x=>x.w).join(' '),'Flashing your saved words.')};
+function addHist(){if(!raw)return;H.filter(x=>x.title===curTitle).forEach(x=>lsDel('fr_t_'+x.id));H=H.filter(x=>x.title!==curTitle);
+ H.unshift({id:curId,title:curTitle,frac:0,date:Date.now()});H.slice(12).forEach(x=>lsDel('fr_t_'+x.id));H=H.slice(0,12);
+ try{localStorage.setItem('fr_t_'+curId,raw.slice(0,400000))}catch(e){}lsSet('fr_h',H);renderH()}
+function savePos(){const e=H.find(x=>x.id===curId);if(!e||!words.length)return;e.frac=i/words.length;e.date=Date.now();lsSet('fr_h',H)}
+function renderH(){const box=$('hl');box.innerHTML='';box.className=H.length?'':'mut';if(!H.length){box.textContent='Files you read appear here, with your place saved.';return}
+ H.forEach(e=>{const r=document.createElement('div');r.className='hrow';const t=document.createElement('span');t.textContent=e.title;
+  const pc=document.createElement('small');pc.textContent=Math.round(e.frac*100)+'% · '+new Date(e.date).toLocaleDateString();
+  const rb=document.createElement('button');rb.textContent='Resume';rb.onclick=()=>{let t2=null;try{t2=localStorage.getItem('fr_t_'+e.id)}catch(x){}
+   if(!t2){$('st').textContent='Text for this item is no longer stored – please re-upload the file.';return}stop();setText(t2,'Resumed “'+e.title+'”.',{id:e.id,title:e.title,frac:e.frac})};
+  const d=document.createElement('button');d.textContent='×';d.onclick=()=>{lsDel('fr_t_'+e.id);H=H.filter(x=>x!==e);lsSet('fr_h',H);renderH()};
+  r.append(t,pc,rb,d);box.appendChild(r)})}
+$('seek').onchange=savePos;addEventListener('pagehide',savePos);
+document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;if(e.key==='s'||e.key==='S')saveWord()});
+applyUI();loadVoices();renderW();renderH();
+</script></body></html>
